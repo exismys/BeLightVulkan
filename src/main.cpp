@@ -1,3 +1,4 @@
+#include "vulkan/vulkan.hpp"
 #if defined(__INTELLISENSE__) || !defined(USE_CPP20_MODULES)
 #include <vulkan/vulkan_raii.hpp>
 #else
@@ -116,8 +117,27 @@ class HelloTriangleApplication {
             auto glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
             std::vector extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+            if (enableValidationLayers) {
+                extensions.push_back(vk::EXTDebugUtilsExtensionName);
+            }
 
             return extensions;
+        }
+
+        static VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(
+            vk::DebugUtilsMessageSeverityFlagBitsEXT       severity,
+            vk::DebugUtilsMessageTypeFlagsEXT              type,
+            const vk::DebugUtilsMessengerCallbackDataEXT * pCallbackData,
+            void *                                         pUserData) {
+
+            if (
+                severity == vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning ||
+                severity == vk::DebugUtilsMessageSeverityFlagBitsEXT::eError
+            ) {
+                std::cerr << "validation layer: type " << to_string(type) << " msg: " << pCallbackData->pMessage << std::endl;
+            }
+
+            return vk::False;
         }
 };
 
