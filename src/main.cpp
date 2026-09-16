@@ -47,6 +47,7 @@ class HelloTriangleApplication {
         vk::SurfaceFormatKHR swapChainSurfaceFormat;
         vk::raii::SwapchainKHR swapChain = nullptr;
         std::vector<vk::Image> swapChainImages;
+        std::vector<vk::raii::ImageView> swapChainImageViews;
 
 	    std::vector<const char *> requiredDeviceExtension = {vk::KHRSwapchainExtensionName};
 
