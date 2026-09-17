@@ -5,6 +5,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Define the project name and set the C++ standard
 project(BeLightVulkan)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -31,7 +32,6 @@ target_compile_definitions(BeLightVulkan PRIVATE
 # Link the required system libraries to the executable
 target_link_libraries(BeLightVulkan
     ${GLFW_LIBRARIES}
-    ${GL_LIBRARIES}
     dl
 )
 
