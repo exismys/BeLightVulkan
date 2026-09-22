@@ -118,7 +118,7 @@ class HelloTriangleApplication {
             auto extensionProperties = context.enumerateInstanceExtensionProperties();
             auto unsupportedPropertyIt = std::ranges::find_if(requiredExtensions, [&extensionProperties](auto const &requiredExtension) {
                 return std::ranges::none_of(extensionProperties, [requiredExtension](auto const &extensionProperty) {
-                    return strcmp(extensionProperty.extensionName, requiredExtension) == 0; 
+                    return strcmp(extensionProperty.extensionName, requiredExtension) == 0;
                 });
             });
 
@@ -157,11 +157,10 @@ class HelloTriangleApplication {
             return extensions;
         }
 
-        static VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(
-            vk::DebugUtilsMessageSeverityFlagBitsEXT       severity,
-            vk::DebugUtilsMessageTypeFlagsEXT              type,
-            const vk::DebugUtilsMessengerCallbackDataEXT * pCallbackData,
-            void *                                         pUserData) {
+        static VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT       severity,
+                                                              vk::DebugUtilsMessageTypeFlagsEXT              type,
+                                                              const vk::DebugUtilsMessengerCallbackDataEXT * pCallbackData,
+                                                              void *                                         pUserData) {
 
             if (
                 severity == vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning ||
@@ -230,9 +229,18 @@ class HelloTriangleApplication {
 
             bool supportsRequiredFeatures = features.template get<vk::PhysicalDeviceVulkan11Features>().shaderDrawParameters &&
                                             features.template get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering &&
+                                            features.template get<vk::PhysicalDeviceVulkan13Features>().synchronization2 &&
                                             features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState;
 
             return supportsVulkan1_3 && supportsGraphics && supportsAllRequiredExtensions && supportsRequiredFeatures;
+        }
+
+        void createSurface() {
+            VkSurfaceKHR _surface;
+            if (glfwCreateWindowSurface(*instance, window, nullptr, &_surface) != 0) { 
+                throw std::runtime_error("failed to create window surface!");
+            }
+            surface = vk::raii::SurfaceKHR(instance, _surface);
         }
 
         void createLogicalDevice() {
@@ -257,7 +265,7 @@ class HelloTriangleApplication {
                                vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT> featureChain = {
                 {},
                 {.shaderDrawParameters = true},
-                {.dynamicRendering = true}, 
+                {.synchronization2 = true, .dynamicRendering = true}, 
                 {.extendedDynamicState = true}
             };
 
@@ -279,14 +287,6 @@ class HelloTriangleApplication {
 
             device = vk::raii::Device(physicalDevice, deviceCreateInfo);
             graphicsQueue = vk::raii::Queue(device, queueIndex, 0);
-        }
-
-        void createSurface() {
-            VkSurfaceKHR _surface;
-            if (glfwCreateWindowSurface(*instance, window, nullptr, &_surface) != 0) { 
-                throw std::runtime_error("failed to create window surface!");
-            }
-            surface = vk::raii::SurfaceKHR(instance, _surface);
         }
 
         void createSwapChain() {
@@ -311,7 +311,7 @@ class HelloTriangleApplication {
                 .imageSharingMode = vk::SharingMode::eExclusive,
                 .preTransform     = surfaceCapabilities.currentTransform,
                 .compositeAlpha   = vk::CompositeAlphaFlagBitsKHR::eOpaque,
-                .presentMode      = chooseSwapPresentMode(availablePresentModes),
+                .presentMode      = presentMode,
                 .clipped          = true
             };
 
@@ -446,6 +446,25 @@ class HelloTriangleApplication {
             graphicsPipeline = vk::raii::Pipeline(device, nullptr, pipelineCreateInfoChain.get<vk::GraphicsPipelineCreateInfo>());
         }
 
+        [[nodiscard]] vk::raii::ShaderModule createShaderModule(const std::vector<char> &code) const {
+            vk::ShaderModuleCreateInfo createInfo{.codeSize = code.size() * sizeof(char), .pCode = reinterpret_cast<const uint32_t *>(code.data())};
+            vk::raii::ShaderModule     shaderModule{device, createInfo};
+
+            return shaderModule;
+	    }
+
+        static std::vector<char> readFile(const std::string &filename) {
+            std::ifstream file(filename, std::ios::ate | std::ios::binary);
+            if (!file.is_open()) {
+                throw std::runtime_error("failed to open file!");
+            }
+            std::vector<char> buffer(file.tellg());
+            file.seekg(0, std::ios::beg);
+            file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+            file.close();
+            return buffer;
+	    }
+
         void createCommandPool() {
             vk::CommandPoolCreateInfo poolInfo{
                 .flags            = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
@@ -490,7 +509,14 @@ class HelloTriangleApplication {
             };
 		    graphicsQueue.submit(submitInfo, *drawFence);
 
-		    const vk::PresentInfoKHR presentInfoKHR{.waitSemaphoreCount = 1, .pWaitSemaphores = &*renderFinishedSemaphore, .swapchainCount = 1, .pSwapchains = &*swapChain, .pImageIndices = &imageIndex};
+		    const vk::PresentInfoKHR presentInfoKHR{
+                .waitSemaphoreCount = 1, 
+                .pWaitSemaphores    = &*renderFinishedSemaphore, 
+                .swapchainCount     = 1, 
+                .pSwapchains        = &*swapChain, 
+                .pImageIndices      = &imageIndex
+            };
+
 		    result = graphicsQueue.presentKHR(presentInfoKHR);
             switch (result) {
                 case vk::Result::eSuccess:
@@ -549,16 +575,14 @@ class HelloTriangleApplication {
 		    commandBuffer.end();
 	    }
 
-	    void transition_image_layout
-        (
-            uint32_t                imageIndex,
-            vk::ImageLayout         old_layout,
-            vk::ImageLayout         new_layout,
-            vk::AccessFlags2        src_access_mask,
-            vk::AccessFlags2        dst_access_mask,
-            vk::PipelineStageFlags2 src_stage_mask,
-            vk::PipelineStageFlags2 dst_stage_mask
-        ) {
+	    void transition_image_layout(uint32_t                imageIndex,
+                                     vk::ImageLayout         old_layout,
+                                     vk::ImageLayout         new_layout,
+                                     vk::AccessFlags2        src_access_mask,
+                                     vk::AccessFlags2        dst_access_mask,
+                                     vk::PipelineStageFlags2 src_stage_mask,
+                                     vk::PipelineStageFlags2 dst_stage_mask) {
+
             vk::ImageMemoryBarrier2 barrier = {
                 .srcStageMask        = src_stage_mask,
                 .srcAccessMask       = src_access_mask,
@@ -584,25 +608,6 @@ class HelloTriangleApplication {
             };
 		    commandBuffer.pipelineBarrier2(dependency_info);
 	    }
-
-        [[nodiscard]] vk::raii::ShaderModule createShaderModule(const std::vector<char> &code) const {
-            vk::ShaderModuleCreateInfo createInfo{.codeSize = code.size() * sizeof(char), .pCode = reinterpret_cast<const uint32_t *>(code.data())};
-            vk::raii::ShaderModule     shaderModule{device, createInfo};
-
-            return shaderModule;
-	    }
-
-        static std::vector<char> readFile(const std::string &filename) {
-            std::ifstream file(filename, std::ios::ate | std::ios::binary);
-            if (!file.is_open()) {
-                throw std::runtime_error("failed to open file!");
-            }
-            std::vector<char> buffer(file.tellg());
-            file.seekg(0, std::ios::beg);
-            file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
-            file.close();
-            return buffer;
-	    }
 };
 
 int main() {
@@ -613,6 +618,5 @@ int main() {
         std::cerr << e.what() << std::endl;
         return EXIT_FAILURE;
     }
-
     return EXIT_SUCCESS;
 }
