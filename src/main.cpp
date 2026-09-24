@@ -143,6 +143,7 @@ class Application {
             createIndexBuffer();
             createUniformBuffers();
             createDescriptorPool();
+            createDescriptorSets();
             createCommandBuffer();
             createSyncObjects();
         }
